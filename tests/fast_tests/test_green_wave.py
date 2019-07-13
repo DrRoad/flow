@@ -8,7 +8,7 @@ from tests.setup_scripts import grid_mxn_exp_setup
 class TestEnvironment(unittest.TestCase):
     def setUp(self):
         # create the environment and scenario classes for a ring road
-        self.env, self.scenario = grid_mxn_exp_setup()
+        self.env, _ = grid_mxn_exp_setup()
         self.env.reset()
 
         # instantiate an experiment class
@@ -49,13 +49,14 @@ class TestEnvironment(unittest.TestCase):
 class TestUtils(unittest.TestCase):
     def setUp(self):
         # create the environment and scenario classes for a ring road
-        self.env, self.scenario = grid_mxn_exp_setup()
+        self.env, _ = grid_mxn_exp_setup()
         self.env.reset()
 
         # instantiate an experiment class
         self.exp = Experiment(self.env)
 
-    def gen_edges(self, row_num, col_num):
+    @staticmethod
+    def gen_edges(col_num, row_num):
         edges = []
         for i in range(col_num):
             edges += ["left" + str(row_num) + '_' + str(i)]
@@ -69,16 +70,13 @@ class TestUtils(unittest.TestCase):
         return edges
 
     def test_get_distance_to_intersection(self):
-        veh_ids = self.env.vehicles.get_ids()
-        dists = self.env.get_distance_to_intersection(veh_ids)
-
         # Obtain list of lists of vehicles on entrance
         # edges, then the distances.
         veh_ids = [
-            self.env.vehicles.get_ids_by_edge(e) for e in self.gen_edges(1, 1)
+            self.env.k.vehicle.get_ids_by_edge(e) for e in self.gen_edges(1, 1)
         ]
         dists = [self.env.get_distance_to_intersection(v) for v in veh_ids]
-        grid = self.env.scenario.net_params.additional_params['grid_array']
+        grid = self.env.net_params.additional_params['grid_array']
         short_length = grid['short_length']
 
         # The first check asserts all the lists are equal. With the default
@@ -93,31 +91,14 @@ class TestUtils(unittest.TestCase):
 
         # Asserts that when a vehicles is in a junction,
         # get_distance_to_intersection returns 0.
-        veh_edges = self.env.vehicles.get_edge(self.env.vehicles.get_ids())
+        veh_edges = self.env.k.vehicle.get_edge(self.env.k.vehicle.get_ids())
         while not ['center' in edge for edge in veh_edges]:
-            print(self.env.vehicles.get_edge(self.env.vehicles.get_ids()))
+            print(self.env.k.vehicle.get_edge(self.env.k.vehicle.get_ids()))
             self.env.step(rl_actions=[])
         junction_veh = list(
-            filter(lambda x: 'center' in x, self.env.vehicles.get_ids()))
+            filter(lambda x: 'center' in x, self.env.k.vehicle.get_ids()))
         for veh_id in junction_veh:
             self.assertEqual(0, self.env.get_distance_to_intersection(veh_id))
-
-    def test_sort_by_intersection_dist(self):
-        self.env.reset()
-        # Get the veh_ids by entrance edges.
-        veh_ids = [
-            self.env.vehicles.get_ids_by_edge(e) for e in self.gen_edges(1, 1)
-        ]
-
-        # Each list in veh_ids is inherently sorted from
-        # farthest to closest. We zip the lists together
-        # to obtain the first 4 closeset, then second 4...
-        dists = list(zip(*[v for v in veh_ids]))
-        sort = self.env.sort_by_intersection_dist()
-
-        # Compare dists from farthest to closest.
-        for i, veh_id in enumerate(sort[::-1]):
-            self.assertTrue(veh_id in dists[i // 4])
 
     def tearDown(self):
         # terminate the traci instance

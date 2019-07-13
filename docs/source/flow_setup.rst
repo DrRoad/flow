@@ -1,19 +1,21 @@
+..    include:: <isonum.txt>
 .. contents:: Table of contents
 
-Local Installation 
+Local Installation of Flow
 ==================
 
 To get Flow running, you need three things: Flow,
-SUMO, and (recommended to explore the full suite of Flow's capabilities) 
+
+SUMO, and (recommended to explore the full suite of Flow's capabilities)
 a reinforcement learning library (RLlib/rllab). If you wish to use Flow with
 the traffic simulator Aimsun, this can be achieved by following the setup
 instructions under the "Installing Aimsun" subsection.
-If you choose not to install a reinforcement learning library, you will 
+If you choose not to install a reinforcement learning library, you will
 still be able to build and run SUMO-only traffic tasks, but will not be
 able to run experiments which require learning agents. Once
 each component is installed successfully, you might get some missing
 module bugs from Python. Just install the missing module using
-your OS-specific package manager / installation tool. Follow the 
+your OS-specific package manager / installation tool. Follow the
 shell commands below to get started.
 
 **It is highly recommended that users install**
@@ -23,7 +25,7 @@ shell commands below to get started.
 doing so.**
 
 Installing Flow and SUMO
-----------
+------------------------
 
 In this section we install Flow as well as the binaries and packages needed
 to support the traffic simulator used in modeling the dynamics of traffic
@@ -46,7 +48,7 @@ script. Be sure to run the below commands from ``/path/to/flow``.
     conda env create -f environment.yml
     source activate flow
     # install flow within the environment
-    python setup.py develop
+    pip install -e .
 
 Next, we install the necessary pre-compiled SUMO binaries and python tools. In order to
 install everything you will need from SUMO, run one of the below scripts from
@@ -95,7 +97,7 @@ Finally, test your SUMO install and version by running the following commands.
     sumo-gui
 
 
-*Troubleshooting*: 
+*Troubleshooting*:
 Note that, if the above commands did not work, you may need to run
 ``source ~/.bashrc``  or open a new terminal to update your $PATH variable.
 
@@ -103,7 +105,7 @@ Note that, if the above commands did not work, you may need to run
 If you are a Mac user and the above command gives you the error ``FXApp:openDisplay: unable to open display :0.0``, make sure to open the application XQuartz.
 
 Testing your installation
-~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Once the above modules have been successfully installed, we can test the
 installation by running a few examples. Before trying to run any examples, be
@@ -125,7 +127,7 @@ few seconds, a la (Sugiyama et al, 2008). This means that you have Flow
 properly configured with SUMO and Flow!
 
 
-Installing Aimsun
+(Optional) Installing Aimsun
 -----------------
 
 In addition to SUMO, Flow supports the use of the traffic simulator "Aimsun".
@@ -140,9 +142,12 @@ during the execution of various tasks. The path should look something like:
 
 ::
 
-    /home/user/Aimsun_Next_X_Y_Z/
+    /home/user/Aimsun_Next_X_Y_Z/                   # Linux
+    /Applications/Aimsun Next.app/Contents/MacOS/   # OS X
 
-Finally, being that Aimsun's python API is written to support Python 2.7.4,
+`Note for Mac users:` when you download Aimsun, you will get a folder named "Programming". You need to rename it to "programming" (all lowercase) and to move it inside the "Aimsun Next.app/Contents/MacOS/" directory so that the python API can work.
+
+In addition, being that Aimsun's python API is written to support Python 2.7.4,
 we will need to create a Python 2.7.4 conda environment that Aimsun can refer
 to when executing commands. In order to do so, run the following script from
 the Flow main directory:
@@ -159,6 +164,8 @@ required conda env by typing:
     source activate aimsun_flow
     which python
 
+Important note: For running Aimsun experiments, the `flow` environment should be
+used, NOT the `aimsun_flow` environment that was just created.
 The latter command should return an output similar to:
 
 ::
@@ -170,22 +177,33 @@ place it under the `AIMSUN_SITEPACKAGES` variable in flow/config.py.
 
 
 Testing your installation
-~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TODO
+To test that you installation was successful, you can try running one of the
+Aimsun examples within the Flow main directory. In order to do so, you need
+to activate the `flow` env. Type:
+
+::
+
+    source deactivate aimsun_flow
+    source activate flow
+    python examples/aimsun/sugiyama.py
 
 
 (Optional) Install Ray RLlib
-----------
+----------------------------
 
 Flow has been tested on a variety of RL libraries, the installation of which is
 optional but may be of use when trying to execute some of the examples files
 located in Flow.
 RLlib is one such library.
 First visit <https://github.com/flow-project/ray/blob/master/doc/source/installation.rst> and
-install the required packages. Do NOT `pip install ray`.
+install the required packages.
 
-The installation process for this library is as follows:
+If you are not intending to develop RL algorithms or customize rllib you don't need to do anything,
+Ray was installed when you created the conda environment.
+
+If you are intending to modify Ray, the installation process for this library is as follows:
 
 ::
 
@@ -194,14 +212,14 @@ The installation process for this library is as follows:
     cd ray/python/
     python setup.py develop
 
-If missing libraries cause errors, please also install additional 
-required libraries as specified at 
+If missing libraries cause errors, please also install additional
+required libraries as specified at
 <http://ray.readthedocs.io/en/latest/installation.html> and
 then follow the setup instructions.
 
 
 Testing your installation
-~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 See `getting started with RLlib <http://ray.readthedocs.io/en/latest/rllib.html#getting-started>`_ for sample commands.
 
@@ -226,7 +244,7 @@ To visualize the training progress:
 
     tensorboard --logdir=~/ray_results
 
-If tensorboard is not installed, you can install with pip: 
+If tensorboard is not installed, you can install with pip:
 
 ::
 
@@ -244,7 +262,7 @@ jobs from there.
 
 
 (Optional) Install Rllab-multiagent
-----------
+-----------------------------------
 
 `rllab-multiagent` is another RL library that is compatible with Flow.
 In order to install the `rllab-multiagent` library, follow the below instructions:
@@ -272,14 +290,14 @@ For mac run
 
 
 Testing your installation
-~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To run any of the RL examples, make sure to run
 
 ::
 
     source activate flow
-    
+
 In order to test run an Flow experiment in rllab-multiagent, try the following
 command:
 
@@ -292,7 +310,7 @@ rllab-multiagent.
 
 
 (Optional) Direct install of SUMO from GitHub
-----------
+---------------------------------------------
 
 The below commands walk you through installing and building SUMO locally. Note
 that if this does not work, you are recommended to point an issue on the
@@ -307,12 +325,17 @@ We begin by downloading SUMO's github directory:
     cd ~
     git clone https://github.com/eclipse/sumo.git
     cd sumo
-    git checkout 1d4338ab80
+    git checkout 2147d155b1
     make -f Makefile.cvs
 
 If you have OSX, run the following commands. If you don't have brew
 you can find installation instructions at
 <https://docs.brew.sh/Installation>
+
+Alternatively, the following segment of installation instructions is
+also compatible with OSX installation, following the brew updates and
+installations shown below.
+<https://sumo.dlr.de/wiki/Installing/Linux_Build#Building_the_SUMO_binaries_with_cmake_.28recommended.29>
 
 ::
 
@@ -347,47 +370,17 @@ If you have Ubuntu 14.04+, run the following command
     source ~/.bashrc
 
 
-Remote installation using docker
-==========
+Virtual installation of Flow (using docker containers)
+================================
 
-Installation
-----------
-
-Installation of a remote desktop and docker to get access to flow quickly
-
-First install docker: https://www.docker.com/
-
-In terminal
-
+To install a containerized Flow stack, run:
 ::
+    docker run -d -p 5901:5901 -p 6901:6901 fywu85/flow-desktop:latest
 
-    1° docker pull lucasfischerberkeley/flowdesktop
-    2° docker run -d -p 5901:5901 -p 6901:6901 -p 8888:8888 lucasfischerberkeley/flowdesktop
-    
-Go into your browser ( Firefox, Chrome, Safari)
-
+To access the docker container, go to the following URL and enter the default password `password`:
 ::
+    http://localhost:6901/vnc.html
 
-    1° Go to http://localhost:6901/?password=vncpassword
-    2° Go to Applications and open Terminal Emulator
-    3° For SUMO: Write python flow/examples/sumo/sugiyama.py and run it
-    4° For rllib : Write python flow/examples/rllib/stabilizing_the_ring.py and run it
-    5° For rllab : source activate flow-rllab and python flow/examples/rllab/figure_eight.py ( first time, run it twice)
-    
-
-Notebooks and tutorial
-----------
-
-In the docker desktop
-
+To use the Jupyter Notebook inside the container, run:
 ::
-
-    1° Go into Terminal Emulator
-    2° Run jupyter notebook --NotebookApp.token=admin --ip 0.0.0.0 --allow-root
-
-Go into your browser ( Firefox, Chrome, Safari)
-
-::
-
-    1° go to localhost:8888/tree
-    2° the password is 'admin' and you can run all your notebooks and tutorials
+    jupyter notebook --ip=127.0.0.1

@@ -2,8 +2,15 @@ import unittest
 import os
 import numpy as np
 
-from flow.core.params import InitialConfig, NetParams
+from flow.config import PROJECT_PATH
+from flow.core.params import InitialConfig
+from flow.core.params import NetParams
 from flow.core.params import VehicleParams
+from flow.core.params import EnvParams
+from flow.core.params import SumoParams
+from flow.scenarios.loop import LoopScenario, ADDITIONAL_NET_PARAMS
+from flow.envs import TestEnv
+from flow.scenarios import Scenario
 
 from flow.controllers.routing_controllers import ContinuousRouter
 from flow.controllers.car_following_models import IDMController
@@ -15,6 +22,16 @@ from tests.setup_scripts import variable_lanes_exp_setup
 os.environ["TEST_FLAG"] = "True"
 
 
+class NoRouteNetwork(LoopScenario):
+    """A network with no routes.
+
+    Used to check for default route assignment.
+    """
+
+    def specify_routes(self, net_params):
+        return None
+
+
 class TestGetX(unittest.TestCase):
     """
     Tests the get_x function for vehicles placed in links and in junctions.
@@ -24,22 +41,27 @@ class TestGetX(unittest.TestCase):
 
     def setUp(self):
         # create the environment and scenario classes for a figure eight
-        env, self.scenario = figure_eight_exp_setup()
+        self.env, _ = figure_eight_exp_setup()
 
     def tearDown(self):
         # free data used by the class
-        self.scenario = None
+        self.env = None
 
     def test_getx(self):
         # test for an edge in the lanes
-        edge_1 = "bottom_lower_ring"
+        edge_1 = "bottom"
         pos_1 = 4.72
-        self.assertAlmostEqual(self.scenario.get_x(edge_1, pos_1), 5)
+        self.assertAlmostEqual(self.env.k.scenario.get_x(edge_1, pos_1), 5)
 
         # test for an edge in the internal links
-        edge_2 = ":bottom_lower_ring"
+        edge_2 = ":bottom"
         pos_2 = 0.1
-        self.assertAlmostEqual(self.scenario.get_x(edge_2, pos_2), 0.1)
+        self.assertAlmostEqual(self.env.k.scenario.get_x(edge_2, pos_2), 0.1)
+
+    def test_error(self):
+        edge = ''
+        pos = 4.72
+        self.assertAlmostEqual(self.env.k.scenario.get_x(edge, pos), -1001)
 
 
 class TestGetEdge(unittest.TestCase):
@@ -51,22 +73,23 @@ class TestGetEdge(unittest.TestCase):
 
     def setUp(self):
         # create the environment and scenario classes for a figure eight
-        env, self.scenario = figure_eight_exp_setup()
+        self.env, scenario = figure_eight_exp_setup()
 
     def tearDown(self):
         # free data used by the class
-        self.scenario = None
+        self.env.terminate()
+        self.env = None
 
     def test_get_edge(self):
         # test for a position in the lanes
         x1 = 5
         self.assertTupleEqual(
-            self.scenario.get_edge(x1), ("bottom_lower_ring", 4.72))
+            self.env.k.scenario.get_edge(x1), ("bottom", 4.72))
 
         # test for a position in the internal links
         x2 = 0.1
         self.assertTupleEqual(
-            self.scenario.get_edge(x2), (":bottom_lower_ring", 0.1))
+            self.env.k.scenario.get_edge(x2), (":bottom", 0.1))
 
 
 class TestEvenStartPos(unittest.TestCase):
@@ -92,7 +115,7 @@ class TestEvenStartPos(unittest.TestCase):
         }
         net_params = NetParams(additional_params=additional_net_params)
 
-        # place 5 vehicles in the network (we need at least more than 1)
+        # place 15 vehicles in the network (we need at least more than 1)
         vehicles = VehicleParams()
         vehicles.add(
             veh_id="test",
@@ -101,7 +124,7 @@ class TestEvenStartPos(unittest.TestCase):
             num_vehicles=15)
 
         # create the environment and scenario classes for a ring road
-        self.env, self.scenario = ring_road_exp_setup(
+        self.env, _ = ring_road_exp_setup(
             net_params=net_params,
             initial_config=initial_config,
             vehicles=vehicles)
@@ -126,14 +149,15 @@ class TestEvenStartPos(unittest.TestCase):
         self.setUp_gen_start_pos(initial_config)
 
         # get the positions of all vehicles
-        ids = self.env.vehicles.get_ids()
-        veh_pos = np.array([self.env.get_x_by_id(veh_id) for veh_id in ids])
+        ids = self.env.k.vehicle.get_ids()
+        veh_pos = np.array([self.env.k.vehicle.get_x_by_id(veh_id)
+                            for veh_id in ids])
 
         # difference in position between the nth vehicle and the vehicle ahead
         # of it
         nth_headway = np.mod(
             np.append(veh_pos[1:], veh_pos[0]) - veh_pos,
-            self.env.scenario.length)
+            self.env.k.scenario.length())
 
         # check that the position of the first vehicle is at 0
         self.assertEqual(veh_pos[0], 0)
@@ -158,17 +182,18 @@ class TestEvenStartPos(unittest.TestCase):
         self.setUp_gen_start_pos(initial_config)
 
         # get the positions of all vehicles
-        ids = self.env.vehicles.get_ids()
-        veh_pos = np.array([self.env.get_x_by_id(veh_id) for veh_id in ids])
+        ids = self.env.k.vehicle.get_ids()
+        veh_pos = np.array([self.env.k.vehicle.get_x_by_id(veh_id)
+                            for veh_id in ids])
 
         # difference in position between the nth vehicle and the vehicle ahead
         # of it
         nth_headway = np.mod(
             np.append(veh_pos[1:], veh_pos[0]) - veh_pos,
-            self.env.scenario.length)
+            self.env.k.scenario.length())
 
         # check that the position of the first vehicle is at 0
-        self.assertEqual(veh_pos[0], x0 % self.env.scenario.length)
+        self.assertEqual(veh_pos[0], x0 % self.env.k.scenario.length())
 
         # if all element are equal, there should only be one unique value
         self.assertEqual(np.unique(np.around(nth_headway, 2)).size, 1)
@@ -188,14 +213,15 @@ class TestEvenStartPos(unittest.TestCase):
         self.setUp_gen_start_pos(initial_config)
 
         # get the positions of all vehicles
-        ids = self.env.vehicles.get_ids()
-        veh_pos = np.array([self.env.get_x_by_id(veh_id) for veh_id in ids])
+        ids = self.env.k.vehicle.get_ids()
+        veh_pos = np.array([self.env.k.vehicle.get_x_by_id(veh_id)
+                            for veh_id in ids])
 
         # difference in position between the nth vehicle and the vehicle ahead
         # of it
         nth_headway = np.mod(
             np.append(veh_pos[1:], veh_pos[0]) - veh_pos,
-            self.env.scenario.length)
+            self.env.k.scenario.length())
 
         # check that all vehicles except the last vehicle have the same spacing
         self.assertEqual(np.unique(np.around(nth_headway[:-1], 2)).size, 1)
@@ -218,17 +244,19 @@ class TestEvenStartPos(unittest.TestCase):
         # create the environment
         self.setUp_gen_start_pos(initial_config)
 
-        startpos, _ = self.scenario.generate_starting_positions()
+        startpos, _ = self.env.k.scenario.generate_starting_positions(
+            initial_config=initial_config
+        )
 
         # get the positions of all vehicles
-        veh_pos = np.array([self.scenario.get_x(pos[0], pos[1])
+        veh_pos = np.array([self.env.k.scenario.get_x(pos[0], pos[1])
                             for pos in startpos])
 
         # difference in position between the nth vehicle and the vehicle ahead
         # of it
         nth_headway = np.mod(
             np.append(veh_pos[1:], veh_pos[0]) - veh_pos,
-            self.env.scenario.length)
+            self.env.k.scenario.length())
 
         # check that all vehicles, including the last vehicle, have the same
         # spacing
@@ -250,14 +278,15 @@ class TestEvenStartPos(unittest.TestCase):
 
         # create the environment
         self.setUp_gen_start_pos(initial_config)
+        lanes = self.env.net_params.additional_params['lanes']
 
         # get the positions of all vehicles
-        ids = self.env.vehicles.get_ids()
+        ids = self.env.k.vehicle.get_ids()
         veh_pos = []
-        for i in range(self.env.scenario.lanes):
+        for i in range(lanes):
             veh_pos.append([
-                self.env.get_x_by_id(veh_id) for veh_id in ids
-                if self.env.vehicles.get_lane(veh_id) == i
+                self.env.k.vehicle.get_x_by_id(veh_id) for veh_id in ids
+                if self.env.k.vehicle.get_lane(veh_id) == i
             ])
 
         # check that the vehicles are uniformly distributed in the number of
@@ -267,12 +296,12 @@ class TestEvenStartPos(unittest.TestCase):
             # ahead of it
             nth_headway = \
                 np.mod(np.append(veh_pos[i][1:], veh_pos[i][0]) - veh_pos[i],
-                       self.env.scenario.length)
+                       self.env.k.scenario.length())
 
             self.assertEqual(np.unique(np.around(nth_headway[:-1], 2)).size, 1)
 
         # check that there are no vehicles in the remaining lanes
-        for i in range(self.env.scenario.lanes - lanes_distribution):
+        for i in range(lanes - lanes_distribution):
             self.assertEqual(len(veh_pos[i + lanes_distribution]), 0)
 
         # delete the created environment
@@ -292,8 +321,8 @@ class TestEvenStartPos(unittest.TestCase):
         self.setUp_gen_start_pos(initial_config)
 
         # check that only the first lane has vehicles
-        ids = self.env.vehicles.get_ids()
-        veh_lanes = [self.env.vehicles.get_lane(veh_id) for veh_id in ids]
+        ids = self.env.k.vehicle.get_ids()
+        veh_lanes = [self.env.k.vehicle.get_lane(veh_id) for veh_id in ids]
         self.assertEqual(np.unique(veh_lanes).size, 1)
 
         # delete the created environment
@@ -310,24 +339,25 @@ class TestEvenStartPos(unittest.TestCase):
 
         # create the environment
         self.setUp_gen_start_pos(initial_config)
+        lanes = self.env.net_params.additional_params['lanes']
 
         # get the positions of all vehicles
-        ids = self.env.vehicles.get_ids()
+        ids = self.env.k.vehicle.get_ids()
         veh_pos = []
-        for i in range(self.env.scenario.lanes):
+        for i in range(lanes):
             veh_pos.append([
-                self.env.get_x_by_id(veh_id) for veh_id in ids
-                if self.env.vehicles.get_lane(veh_id) == i
+                self.env.k.vehicle.get_x_by_id(veh_id) for veh_id in ids
+                if self.env.k.vehicle.get_lane(veh_id) == i
             ])
 
         # check that the vehicles are uniformly distributed in the number of
         # requested lanes lanes
-        for i in range(self.env.scenario.lanes):
+        for i in range(lanes):
             # difference in position between the nth vehicle and the vehicle
             # ahead of it
             nth_headway = \
                 np.mod(np.append(veh_pos[i][1:], veh_pos[i][0]) - veh_pos[i],
-                       self.env.scenario.length)
+                       self.env.k.scenario.length())
 
             self.assertEqual(np.unique(np.around(nth_headway[:-1], 2)).size, 1)
 
@@ -349,8 +379,29 @@ class TestEvenStartPos(unittest.TestCase):
 
         # check that all vehicles are only placed in edges specified in the
         # edges_distribution term
-        for veh_id in self.env.vehicles.get_ids():
-            self.assertTrue(self.env.vehicles.get_edge(veh_id) in edges)
+        for veh_id in self.env.k.vehicle.get_ids():
+            self.assertTrue(self.env.k.vehicle.get_edge(veh_id) in edges)
+
+    def test_edges_distribution_dict(self):
+        """
+        Tests that vehicles of the correct quantity are placed on each edge
+        when edges_distribution is a dict.
+        """
+        # test that when the number of vehicles don't match an AssertionError
+        # is raised
+        edges = {"top": 2, "bottom": 1}
+        initial_config = InitialConfig(edges_distribution=edges)
+        self.assertRaises(AssertionError, self.setUp_gen_start_pos,
+                          initial_config=initial_config)
+
+        # verify that the correct number of vehicles are placed in each edge
+        edges = {"top": 5, "bottom": 6, "left": 4}
+        initial_config = InitialConfig(edges_distribution=edges)
+        self.setUp_gen_start_pos(initial_config)
+
+        for edge in edges:
+            self.assertEqual(len(self.env.k.vehicle.get_ids_by_edge(edge)),
+                             edges[edge])
 
     def test_num_vehicles(self):
         """
@@ -363,17 +414,16 @@ class TestEvenStartPos(unittest.TestCase):
         self.setUp_gen_start_pos()
 
         # check when "num_vehicles" is not specified
-        startpos, startlanes = self.env.scenario.generate_starting_positions()
-        self.assertEqual(
-            len(startpos), self.env.scenario.vehicles.num_vehicles)
-        self.assertEqual(
-            len(startlanes), self.env.scenario.vehicles.num_vehicles)
+        pos, lanes = self.env.k.scenario.generate_starting_positions(
+            initial_config=InitialConfig())
+        self.assertEqual(len(pos), self.env.k.vehicle.num_vehicles)
+        self.assertEqual(len(lanes), self.env.k.vehicle.num_vehicles)
 
         # check when "num_vehicles" is specified
-        startpos, startlanes = self.env.scenario.generate_starting_positions(
-            num_vehicles=10)
-        self.assertEqual(len(startpos), 10)
-        self.assertEqual(len(startlanes), 10)
+        pos, lanes = self.env.k.scenario.generate_starting_positions(
+            initial_config=InitialConfig(), num_vehicles=10)
+        self.assertEqual(len(pos), 10)
+        self.assertEqual(len(lanes), 10)
 
 
 class TestEvenStartPosInternalLinks(unittest.TestCase):
@@ -408,14 +458,15 @@ class TestEvenStartPosInternalLinks(unittest.TestCase):
 
     def test_even_start_pos_internal(self):
         # get the positions of all vehicles
-        ids = self.env.vehicles.get_ids()
-        veh_pos = np.array([self.env.get_x_by_id(veh_id) for veh_id in ids])
+        ids = self.env.k.vehicle.get_ids()
+        veh_pos = np.array([self.env.k.vehicle.get_x_by_id(veh_id)
+                            for veh_id in ids])
 
         # difference in position between the nth vehicle and the vehicle ahead
         # of it
         nth_headway = np.mod(
             np.append(veh_pos[1:], veh_pos[0]) - veh_pos,
-            self.env.scenario.length)
+            self.env.k.scenario.length())
 
         try:
             # if all element are equal, there should only be one unique value
@@ -429,11 +480,11 @@ class TestEvenStartPosInternalLinks(unittest.TestCase):
                     # if not, check that the last or first vehicle is right
                     # after an internal link, on position 0
                     pos = [
-                        self.env.get_x_by_id(veh_id)
+                        self.env.k.vehicle.get_x_by_id(veh_id)
                         for veh_id in [ids[i + 1], ids[i]]
                     ]
                     rel_pos = [
-                        self.env.scenario.get_edge(pos_i)[1] for pos_i in pos
+                        self.env.k.scenario.get_edge(pos_i)[1] for pos_i in pos
                     ]
 
                     self.assertTrue(np.any(np.array(rel_pos) == 0))
@@ -471,7 +522,7 @@ class TestRandomStartPos(unittest.TestCase):
             initial_config=initial_config,
             vehicles=vehicles)
 
-    def tearDown_gen_start_pos(self):
+    def tearDown(self):
         # terminate the traci instance
         self.env.terminate()
 
@@ -487,8 +538,8 @@ class TestRandomStartPos(unittest.TestCase):
         self.setUp_gen_start_pos(initial_config)
 
         # verify that all vehicles are located in the number of allocated lanes
-        for veh_id in self.env.vehicles.get_ids():
-            self.assertLess(self.env.vehicles.get_lane(veh_id),
+        for veh_id in self.env.k.vehicle.get_ids():
+            self.assertLess(self.env.k.vehicle.get_lane(veh_id),
                             initial_config.lanes_distribution)
 
     def test_edges_distribution(self):
@@ -506,8 +557,29 @@ class TestRandomStartPos(unittest.TestCase):
 
         # check that all vehicles are only placed in edges specified in the
         # edges_distribution term
-        for veh_id in self.env.vehicles.get_ids():
-            self.assertTrue(self.env.vehicles.get_edge(veh_id) in edges)
+        for veh_id in self.env.k.vehicle.get_ids():
+            self.assertTrue(self.env.k.vehicle.get_edge(veh_id) in edges)
+
+    def test_edges_distribution_dict(self):
+        """
+        Tests that vehicles of the correct quantity are placed on each edge
+        when edges_distribution is a dict.
+        """
+        # test that when the number of vehicles don't match an AssertionError
+        # is raised
+        edges = {"top": 2, "bottom": 1}
+        initial_config = InitialConfig(edges_distribution=edges)
+        self.assertRaises(AssertionError, self.setUp_gen_start_pos,
+                          initial_config=initial_config)
+
+        # verify that the correct number of vehicles are placed in each edge
+        edges = {"top": 2, "bottom": 3, "left": 0}
+        initial_config = InitialConfig(edges_distribution=edges)
+        self.setUp_gen_start_pos(initial_config)
+
+        for edge in edges:
+            self.assertEqual(len(self.env.k.vehicle.get_ids_by_edge(edge)),
+                             edges[edge])
 
 
 class TestEvenStartPosVariableLanes(unittest.TestCase):
@@ -536,18 +608,9 @@ class TestEvenStartPosVariableLanes(unittest.TestCase):
 
     def test_even_start_pos_coverage(self):
         """
-        Ensure that enough vehicles are placed in the network, and they cover
-        all possible lanes.
+        Ensure that the vehicles cover all possible lanes.
         """
-        expected_num_vehicles = self.env.vehicles.num_vehicles
-        actual_num_vehicles = \
-            len(self.env.traci_connection.vehicle.getIDList())
-
-        # check that enough vehicles are in the network
-        self.assertEqual(expected_num_vehicles, actual_num_vehicles)
-
-        # check that all possible lanes are covered
-        lanes = self.env.vehicles.get_lane(self.env.vehicles.get_ids())
+        lanes = self.env.k.vehicle.get_lane(self.env.k.vehicle.get_ids())
         self.assertFalse(any(i not in lanes for i in range(4)))
 
 
@@ -586,10 +649,13 @@ class TestEdgeLength(unittest.TestCase):
         }
         net_params = NetParams(additional_params=additional_net_params)
 
-        # create the environment and scenario classes for a figure eight
+        # create the environment and scenario classes for a ring road
         env, scenario = ring_road_exp_setup(net_params=net_params)
 
-        self.assertEqual(scenario.edge_length("top"), 250)
+        self.assertEqual(env.k.scenario.edge_length("top"), 250)
+
+        # test for errors as well
+        self.assertAlmostEqual(env.k.scenario.edge_length("wrong_name"), -1001)
 
     def test_edge_length_junctions(self):
         """
@@ -607,9 +673,9 @@ class TestEdgeLength(unittest.TestCase):
         env, scenario = figure_eight_exp_setup(net_params=net_params)
 
         self.assertAlmostEqual(
-            scenario.edge_length(":center_intersection_0"), 5.00)
+            env.k.scenario.edge_length(":center_0"), 9.40)  # FIXME: 6.2?
         self.assertAlmostEqual(
-            scenario.edge_length(":center_intersection_1"), 6.20)
+            env.k.scenario.edge_length(":center_1"), 9.40)  # FIXME: 6.2?
 
 
 class TestSpeedLimit(unittest.TestCase):
@@ -632,7 +698,10 @@ class TestSpeedLimit(unittest.TestCase):
         # create the environment and scenario classes for a figure eight
         env, scenario = ring_road_exp_setup(net_params=net_params)
 
-        self.assertAlmostEqual(scenario.speed_limit("top"), 60)
+        self.assertAlmostEqual(env.k.scenario.speed_limit("top"), 60)
+
+        # test for errors as well
+        self.assertAlmostEqual(env.k.scenario.speed_limit("wrong_name"), -1001)
 
     def test_speed_limit_junctions(self):
         """
@@ -650,8 +719,9 @@ class TestSpeedLimit(unittest.TestCase):
         env, scenario = figure_eight_exp_setup(net_params=net_params)
 
         self.assertAlmostEqual(
-            scenario.speed_limit("bottom_upper_ring_in"), 60)
-        self.assertAlmostEqual(scenario.speed_limit(":top_upper_ring_0"), 60)
+            env.k.scenario.speed_limit("bottom"), 60)
+        self.assertAlmostEqual(
+            env.k.scenario.speed_limit(":top_0"), 60)
 
 
 class TestNumLanes(unittest.TestCase):
@@ -674,7 +744,10 @@ class TestNumLanes(unittest.TestCase):
         # create the environment and scenario classes for a figure eight
         env, scenario = ring_road_exp_setup(net_params=net_params)
 
-        self.assertEqual(scenario.num_lanes("top"), 2)
+        self.assertEqual(env.k.scenario.num_lanes("top"), 2)
+
+        # test for errors as well
+        self.assertAlmostEqual(env.k.scenario.num_lanes("wrong_name"), -1001)
 
     def test_num_lanes_junctions(self):
         """
@@ -691,8 +764,8 @@ class TestNumLanes(unittest.TestCase):
 
         env, scenario = figure_eight_exp_setup(net_params=net_params)
 
-        self.assertEqual(scenario.num_lanes("bottom_upper_ring_in"), 3)
-        self.assertEqual(scenario.num_lanes(":top_upper_ring_0"), 3)
+        self.assertEqual(env.k.scenario.num_lanes("bottom"), 3)
+        self.assertEqual(env.k.scenario.num_lanes(":top_0"), 3)
 
 
 class TestGetEdgeList(unittest.TestCase):
@@ -703,20 +776,17 @@ class TestGetEdgeList(unittest.TestCase):
 
     def setUp(self):
         # create the environment and scenario classes for a figure eight
-        env, self.scenario = figure_eight_exp_setup()
+        self.env, scenario = figure_eight_exp_setup()
 
     def tearDown(self):
         # free data used by the class
-        self.scenario = None
+        self.env.terminate()
+        self.env = None
 
     def test_get_edge_list(self):
-        edge_list = self.scenario.get_edge_list()
+        edge_list = self.env.k.scenario.get_edge_list()
         expected_edge_list = [
-            "bottom_lower_ring", "right_lower_ring_in", "right_lower_ring_out",
-            "left_upper_ring", "top_upper_ring", "right_upper_ring",
-            "bottom_upper_ring_in", "bottom_upper_ring_out", "top_lower_ring",
-            "left_lower_ring"
-        ]
+            "bottom", "top", "upper_ring", "right", "left", "lower_ring"]
 
         self.assertCountEqual(edge_list, expected_edge_list)
 
@@ -729,21 +799,18 @@ class TestGetJunctionList(unittest.TestCase):
 
     def setUp(self):
         # create the environment and scenario classes for a figure eight
-        env, self.scenario = figure_eight_exp_setup()
+        self.env, scenario = figure_eight_exp_setup()
 
     def tearDown(self):
         # free data used by the class
-        self.scenario = None
+        self.env.terminate()
+        self.env = None
 
     def test_get_junction_list(self):
-        junction_list = self.scenario.get_junction_list()
+        junction_list = self.env.k.scenario.get_junction_list()
         expected_junction_list = \
-            [':right_upper_ring_0', ':right_lower_ring_in_0',
-             ':center_intersection_1', ':bottom_upper_ring_in_0',
-             ':bottom_lower_ring_0', ':top_lower_ring_0',
-             ':top_upper_ring_0', ':left_lower_ring_0',
-             ':center_intersection_2', ':center_intersection_0',
-             ':center_intersection_3', ':left_upper_ring_0']
+            [':right_0', ':left_0', ':bottom_0', ':top_0', ':center_1',
+             ':center_0']
 
         self.assertCountEqual(junction_list, expected_junction_list)
 
@@ -761,9 +828,8 @@ class TestNextPrevEdge(unittest.TestCase):
         Tests the next_edge() method in the presence of internal links.
         """
         env, scenario = figure_eight_exp_setup()
-        next_edge = scenario.next_edge("bottom_upper_ring_in", 0)
-        expected_next_edge = [(':center_intersection_0', 0),
-                              (':center_intersection_1', 0)]
+        next_edge = env.k.scenario.next_edge("bottom", 0)
+        expected_next_edge = [(':center_1', 0)]
 
         self.assertCountEqual(next_edge, expected_next_edge)
 
@@ -772,8 +838,8 @@ class TestNextPrevEdge(unittest.TestCase):
         Tests the prev_edge() method in the presence of internal links.
         """
         env, scenario = figure_eight_exp_setup()
-        prev_edge = scenario.prev_edge("bottom_upper_ring_in", 0)
-        expected_prev_edge = [(':bottom_upper_ring_in_0', 0)]
+        prev_edge = env.k.scenario.prev_edge("bottom", 0)
+        expected_prev_edge = [(':bottom_0', 0)]
 
         self.assertCountEqual(prev_edge, expected_prev_edge)
 
@@ -782,7 +848,7 @@ class TestNextPrevEdge(unittest.TestCase):
         Tests the next_edge() method in the absence of internal links.
         """
         env, scenario = ring_road_exp_setup()
-        next_edge = scenario.next_edge("top", 0)
+        next_edge = env.k.scenario.next_edge("top", 0)
         expected_next_edge = [("left", 0)]
 
         self.assertCountEqual(next_edge, expected_next_edge)
@@ -792,7 +858,7 @@ class TestNextPrevEdge(unittest.TestCase):
         Tests the prev_edge() method in the absence of internal links.
         """
         env, scenario = ring_road_exp_setup()
-        prev_edge = scenario.prev_edge("top", 0)
+        prev_edge = env.k.scenario.prev_edge("top", 0)
         expected_prev_edge = [("right", 0)]
 
         self.assertCountEqual(prev_edge, expected_prev_edge)
@@ -803,7 +869,8 @@ class TestNextPrevEdge(unittest.TestCase):
         empty list
         """
         env, scenario = highway_exp_setup()
-        next_edge = scenario.next_edge(env.scenario.get_edge_list()[0], 0)
+        next_edge = env.k.scenario.next_edge(
+            env.k.scenario.get_edge_list()[0], 0)
         self.assertTrue(len(next_edge) == 0)
 
     def test_no_edge_behind(self):
@@ -812,8 +879,184 @@ class TestNextPrevEdge(unittest.TestCase):
         empty list
         """
         env, scenario = highway_exp_setup()
-        prev_edge = scenario.prev_edge(env.scenario.get_edge_list()[0], 0)
+        prev_edge = env.k.scenario.prev_edge(
+            env.k.scenario.get_edge_list()[0], 0)
         self.assertTrue(len(prev_edge) == 0)
+
+
+class TestDefaultRoutes(unittest.TestCase):
+
+    def test_default_routes(self):
+        env_params = EnvParams()
+        sim_params = SumoParams(render=False)
+        initial_config = InitialConfig()
+        vehicles = VehicleParams()
+        vehicles.add('human', num_vehicles=1)
+        net_params = NetParams(additional_params=ADDITIONAL_NET_PARAMS)
+
+        # create the scenario
+        scenario = NoRouteNetwork(
+            name='bay_bridge',
+            net_params=net_params,
+            initial_config=initial_config,
+            vehicles=vehicles
+        )
+
+        # create the environment
+        env = TestEnv(
+            env_params=env_params,
+            sim_params=sim_params,
+            scenario=scenario
+        )
+
+        # check the routes
+        self.assertDictEqual(
+            env.k.scenario.rts,
+            {"top": [(["top"], 1)],
+             "bottom": [(["bottom"], 1)],
+             "left": [(["left"], 1)],
+             "right": [(["right"], 1)]}
+        )
+
+
+class TestOpenStreetMap(unittest.TestCase):
+    """Tests the formation of osm files with Flow. This is done on a section of
+    Northside UC Berkeley."""
+
+    def test_sumo(self):
+        sim_params = SumoParams()
+        vehicles = VehicleParams()
+        vehicles.add(veh_id="test")
+        env_params = EnvParams()
+        net_params = NetParams(
+            no_internal_links=False,
+            osm_path=os.path.join(PROJECT_PATH, 'tests/data/euclid.osm'))
+
+        scenario = Scenario(
+            name="UC-Berkeley-Northside",
+            vehicles=vehicles,
+            net_params=net_params)
+
+        env = TestEnv(env_params, sim_params, scenario)
+
+        # check that all the edges were generated
+        self.assertEqual(len(env.k.scenario.get_edge_list()), 29)
+
+
+class TestNetworkTemplateGenerator(unittest.TestCase):
+
+    def test_network_template(self):
+        """Test generate data from network templates.
+
+        This methods tests that routes, vehicle types, and network parameters
+        generated from sumo network templates match the expected values. This
+        is done on a variant of the figure eight scenario.
+        """
+        # generate the network parameters for the figure eight net.xml,
+        # rou.xml, and add.xml files
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        net_params = NetParams(
+            template={
+                # network geometry features
+                "net": os.path.join(dir_path, "test_files/fig8_test.net.xml"),
+                # features associated with the routes vehicles take
+                "rou": os.path.join(dir_path, "test_files/fig8_test.rou.xml"),
+                # features associated with the properties of drivers
+                "vtype": os.path.join(dir_path, "test_files/fig8_test.add.xml")
+            },
+            no_internal_links=False
+        )
+
+        # create the scenario object from the network template files
+        scenario = Scenario(
+            name="template",
+            net_params=net_params,
+            vehicles=VehicleParams()
+        )
+
+        expected_routes = {
+            'routetop':
+                ['top', 'upper_ring', 'right', 'left', 'lower_ring', 'bottom'],
+            'routeupper_ring':
+                ['upper_ring', 'right', 'left', 'lower_ring', 'bottom', 'top'],
+            'routeleft':
+                ['left', 'lower_ring', 'bottom', 'top', 'upper_ring', 'right'],
+            'routebottom':
+                ['bottom', 'top', 'upper_ring', 'right', 'left', 'lower_ring'],
+            'routeright':
+                ['right', 'left', 'lower_ring', 'bottom', 'top', 'upper_ring'],
+            'routelower_ring':
+                ['lower_ring', 'bottom', 'top', 'upper_ring', 'right', 'left']
+        }
+
+        expected_cf_params = {
+            'controller_params': {
+                'speedFactor': 1.0,
+                'speedDev': 0.1,
+                'carFollowModel': 'IDM',
+                'decel': 1.5,
+                'impatience': 0.5,
+                'maxSpeed': 30.0,
+                'accel': 1.0,
+                'sigma': 0.5,
+                'tau': 1.0,
+                'minGap': 0.0
+            },
+            'speed_mode': 31
+        }
+
+        expected_lc_params = {
+            'controller_params': {
+                'lcCooperative': '1.0',
+                'lcKeepRight': '1.0',
+                'laneChangeModel': 'LC2013',
+                'lcStrategic': '1.0',
+                'lcSpeedGain': '1.0'
+            },
+            'lane_change_mode': 1621
+        }
+
+        # test the validity of the outputted results
+        self.assertDictEqual(scenario.routes, expected_routes)
+        self.assertDictEqual(scenario.vehicles.type_parameters['idm']
+                             ['car_following_params'].__dict__,
+                             expected_cf_params)
+        self.assertDictEqual(scenario.vehicles.type_parameters['idm']
+                             ['lane_change_params'].__dict__,
+                             expected_lc_params)
+
+        # test for the case of vehicles in rou.xml
+        net_params = NetParams(
+            template={
+                # network geometry features
+                "net": os.path.join(dir_path, "test_files/fig8_test.net.xml"),
+                # features associated with the routes vehicles take
+                "rou": os.path.join(dir_path, "test_files/lust_test.rou.xml"),
+                # features associated with the properties of drivers
+                "vtype": os.path.join(dir_path, "test_files/fig8_test.add.xml")
+            },
+            no_internal_links=False
+        )
+
+        scenario = Scenario(
+            name="template",
+            net_params=net_params,
+            vehicles=VehicleParams()
+        )
+
+        expected_routes = {
+            'h21652c2:1': [
+                '--31878#3', '--31878#2', '--31878#1', '--31878#0', '-30872#0',
+                '-30872#1', '-30872#2', '-30872#3', '-32750#2', '-32750#3',
+                '-32750#4', '-32750#5', '-32750#6', '-32750#7', '-32750#8',
+                '-32750#9', '-32750#10', '-32750#11', '-32750#12',
+                '--30528#4', '--30528#3', '--30528#2', '--30528#1',
+                '--30528#0', '-31492#2', '--32674#9', '--32674#8',
+                '--32674#7', '--32674#6', '--32674#5', '--32674#4'
+            ]
+        }
+
+        self.assertDictEqual(scenario.routes, expected_routes)
 
 
 if __name__ == '__main__':

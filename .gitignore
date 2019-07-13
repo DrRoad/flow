@@ -88,6 +88,9 @@ ENV/
 # Rope project settings
 .ropeproject
 
+# VSCode project settings
+.vscode
+
 # Don't add xml
 *.xml
 .DS_Store
@@ -98,3 +101,9 @@ Makefile
 data/
 debug/
 .vs/**
+
+# Custom for Aimsun
+*.ang.lck
+*flow.sqlite
+*.ang.old
+*.sang

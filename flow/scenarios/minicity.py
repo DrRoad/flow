@@ -6,12 +6,34 @@ from flow.scenarios.base_scenario import Scenario
 import numpy as np
 from numpy import linspace, pi, sin, cos
 
-ADDITIONAL_NET_PARAMS = {}
 SCALING = 40
 
 
 class MiniCityScenario(Scenario):
-    """Scenario class for bottleneck simulations."""
+    """Scenario class for bottleneck simulations.
+
+    This network is a recreation of the blank (get from something). The size of
+    the network can be modified by updating the SCALING variable within the
+    script.
+
+    In order for right-of-way dynamics to take place at the intersection,
+    set *no_internal_links* in net_params to False.
+
+    Usage
+    -----
+    >>> from flow.core.params import NetParams
+    >>> from flow.core.params import VehicleParams
+    >>> from flow.core.params import InitialConfig
+    >>> from flow.scenarios import MiniCityScenario
+    >>>
+    >>> scenario = MiniCityScenario(
+    >>>     name='minicity',
+    >>>     vehicles=VehicleParams(),
+    >>>     net_params=NetParams(
+    >>>         no_internal_links=False  # we want junctions
+    >>>     )
+    >>> )
+    """
 
     def __init__(self,
                  name,
@@ -19,37 +41,22 @@ class MiniCityScenario(Scenario):
                  net_params,
                  initial_config=InitialConfig(),
                  traffic_lights=TrafficLightParams()):
-        """Instantiate the scenario class.
-
-        Requires from net_params:
-        - scaling: the factor multiplying number of lanes
-
-        In order for right-of-way dynamics to take place at the intersection,
-        set 'no_internal_links' in net_params to False.
-
-        See flow/scenarios/base_scenario.py for description of params.
-        """
-        for p in ADDITIONAL_NET_PARAMS.keys():
-            if p not in net_params.additional_params:
-                raise KeyError('Network parameter "{}" not supplied'.format(p))
-
-        self.nodes = dict()
+        """Instantiate the scenario class."""
+        self.nodes_dict = dict()
 
         super().__init__(name, vehicles, net_params,
                          initial_config, traffic_lights)
 
     def specify_edge_starts(self):
         """See parent class."""
-        # the total length of the network is defined within this function
-        self.length = 0
-
+        length = 0
         edgestarts = []
-        for edge_id in self._edge_list:
+        for edge in self.edges:
             # the current edge starts where the last edge ended
-            edgestarts.append((edge_id, self.length))
+            edgestarts.append((edge['id'], length))
             # increment the total length of the network with the length of the
             # current edge
-            self.length += self._edges[edge_id]['length']
+            length += float(edge['length'])
 
         return edgestarts
 
@@ -103,8 +110,8 @@ class MiniCityScenario(Scenario):
                  {'id': 'n_s14', 'x': 4.75, 'y': 3.75}]
 
         for node in nodes:
-            self.nodes[node['id']] = np.array([node['x'] * SCALING,
-                                               node['y'] * SCALING])
+            self.nodes_dict[node['id']] = np.array([node['x'] * SCALING,
+                                                    node['y'] * SCALING])
 
         for node in nodes:
             node['x'] = node['x'] * SCALING
@@ -423,8 +430,9 @@ class MiniCityScenario(Scenario):
                 edge['shape'] = [(x * SCALING, y * SCALING)
                                  for x, y in edge['shape']]
             else:
-                edge['length'] = np.linalg.norm(self.nodes[edge['to']] -
-                                                self.nodes[edge['from']])
+                edge['length'] = np.linalg.norm(
+                    self.nodes_dict[edge['to']] -
+                    self.nodes_dict[edge['from']])
 
             # fix junction overlapping issue
             junctions = {'e_8_b': 2,

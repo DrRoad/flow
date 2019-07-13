@@ -44,7 +44,7 @@ class KernelSimulation(object):
             an object or variable that is meant to symbolize the network that
             is used during the simulation. For example, in the case of sumo
             simulations, this is (string) the path to the .sumo.cfg file.
-        sim_params : flow.core.params.SumoParams  # FIXME: make ambiguous
+        sim_params : flow.core.params.SimParams
             simulation-specific parameters
         """
         raise NotImplementedError
@@ -81,5 +81,5 @@ class KernelSimulation(object):
         raise NotImplementedError
 
     def close(self):
-        """Closes the current simulation instance."""
+        """Close the current simulation instance."""
         raise NotImplementedError

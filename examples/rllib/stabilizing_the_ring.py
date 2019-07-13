@@ -7,7 +7,10 @@ vehicles in a variable length ring road.
 import json
 
 import ray
-from ray.rllib.agents.agent import get_agent_class
+try:
+    from ray.rllib.agents.agent import get_agent_class
+except ImportError:
+    from ray.rllib.agents.registry import get_agent_class
 from ray.tune import run_experiments
 from ray.tune.registry import register_env
 
@@ -49,6 +52,9 @@ flow_params = dict(
     # name of the scenario class the experiment is running on
     scenario="LoopScenario",
 
+    # simulator that is used by the experiment
+    simulator='traci',
+
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
         sim_step=0.1,
@@ -59,6 +65,7 @@ flow_params = dict(
     env=EnvParams(
         horizon=HORIZON,
         warmup_steps=750,
+        clip_actions=False,
         additional_params={
             "max_accel": 1,
             "max_decel": 1,
@@ -77,7 +84,7 @@ flow_params = dict(
         }, ),
 
     # vehicles to be placed in the network at the start of a rollout (see
-    # flow.core.vehicles.Vehicles)
+    # flow.core.params.VehicleParams)
     veh=vehicles,
 
     # parameters specifying the positioning of vehicles upon initialization/
@@ -87,7 +94,17 @@ flow_params = dict(
 
 
 def setup_exps():
+    """Return the relevant components of an RLlib experiment.
 
+    Returns
+    -------
+    str
+        name of the training algorithm
+    str
+        name of the gym environment to be trained
+    dict
+        training configuration parameters
+    """
     alg_run = "PPO"
 
     agent_cls = get_agent_class(alg_run)
@@ -95,11 +112,12 @@ def setup_exps():
     config["num_workers"] = N_CPUS
     config["train_batch_size"] = HORIZON * N_ROLLOUTS
     config["gamma"] = 0.999  # discount rate
-    config["model"].update({"fcnet_hiddens": [16, 16]})
+    config["model"].update({"fcnet_hiddens": [3, 3]})
     config["use_gae"] = True
     config["lambda"] = 0.97
     config["kl_target"] = 0.02
     config["num_sgd_iter"] = 10
+    config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config["horizon"] = HORIZON
 
     # save the flow params for replay
@@ -126,6 +144,7 @@ if __name__ == "__main__":
                 **config
             },
             "checkpoint_freq": 20,
+            "checkpoint_at_end": True,
             "max_failures": 999,
             "stop": {
                 "training_iteration": 200,

@@ -6,7 +6,10 @@ in a segment of space
 import json
 
 import ray
-from ray.rllib.agents.agent import get_agent_class
+try:
+    from ray.rllib.agents.agent import get_agent_class
+except ImportError:
+    from ray.rllib.agents.registry import get_agent_class
 from ray.tune import run_experiments
 from ray.tune.registry import register_env
 
@@ -75,7 +78,7 @@ additional_env_params = {
 }
 
 # flow rate
-flow_rate = 1900 * SCALING
+flow_rate = 2300 * SCALING
 
 # percentage of flow coming out of each lane
 inflow = InFlows()
@@ -98,7 +101,7 @@ if not DISABLE_TB:
 if not DISABLE_RAMP_METER:
     traffic_lights.add(node_id="3")
 
-additional_net_params = {"scaling": SCALING}
+additional_net_params = {"scaling": SCALING, "speed_limit": 23}
 net_params = NetParams(
     inflows=inflow,
     no_internal_links=False,
@@ -113,6 +116,9 @@ flow_params = dict(
 
     # name of the scenario class the experiment is running on
     scenario="BottleneckScenario",
+
+    # simulator that is used by the experiment
+    simulator='traci',
 
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
@@ -139,7 +145,7 @@ flow_params = dict(
     ),
 
     # vehicles to be placed in the network at the start of a rollout (see
-    # flow.core.vehicles.Vehicles)
+    # flow.core.params.VehicleParams)
     veh=vehicles,
 
     # parameters specifying the positioning of vehicles upon initialization/
@@ -158,7 +164,17 @@ flow_params = dict(
 
 
 def setup_exps():
+    """Return the relevant components of an RLlib experiment.
 
+    Returns
+    -------
+    str
+        name of the training algorithm
+    str
+        name of the gym environment to be trained
+    dict
+        training configuration parameters
+    """
     alg_run = "PPO"
 
     agent_cls = get_agent_class(alg_run)
@@ -171,6 +187,7 @@ def setup_exps():
     config["lambda"] = 0.97
     config["kl_target"] = 0.02
     config["num_sgd_iter"] = 10
+    config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config["horizon"] = HORIZON
 
     # save the flow params for replay
@@ -197,6 +214,7 @@ if __name__ == "__main__":
                 **config
             },
             "checkpoint_freq": 20,
+            "checkpoint_at_end": True,
             "max_failures": 999,
             "stop": {
                 "training_iteration": 200,

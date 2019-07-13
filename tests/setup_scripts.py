@@ -75,7 +75,7 @@ def ring_road_exp_setup(sim_params=None,
             "target_velocity": 8,
             "max_accel": 1,
             "max_decel": 1,
-            "num_steps": 500
+            "sort_vehicles": False,
         }
         env_params = EnvParams(additional_params=additional_env_params)
 
@@ -168,7 +168,7 @@ def figure_eight_exp_setup(sim_params=None,
             "target_velocity": 8,
             "max_accel": 1,
             "max_decel": 1,
-            "num_steps": 500
+            "sort_vehicles": False
         }
         env_params = EnvParams(additional_params=additional_env_params)
 
@@ -193,7 +193,7 @@ def figure_eight_exp_setup(sim_params=None,
 
     # create the scenario
     scenario = Figure8Scenario(
-        name="RingRoadTest",
+        name="FigureEightTest",
         vehicles=vehicles,
         net_params=net_params,
         initial_config=initial_config,
@@ -262,7 +262,7 @@ def highway_exp_setup(sim_params=None,
             "target_velocity": 8,
             "max_accel": 1,
             "max_decel": 1,
-            "num_steps": 500
+            "sort_vehicles": False
         }
         env_params = EnvParams(additional_params=additional_env_params)
 
@@ -374,16 +374,17 @@ def grid_mxn_exp_setup(row_num=1,
     if net_params is None:
         # set default net_params configuration
         total_vehicles = vehicles.num_vehicles
+        num_entries = 2 * row_num + 2 * col_num
         grid_array = {
             "short_length": 100,
             "inner_length": 300,
             "long_length": 3000,
             "row_num": row_num,
             "col_num": col_num,
-            "cars_left": int(total_vehicles / 4),
-            "cars_right": int(total_vehicles / 4),
-            "cars_top": int(total_vehicles / 4),
-            "cars_bot": int(total_vehicles / 4)
+            "cars_left": int(total_vehicles / num_entries),
+            "cars_right": int(total_vehicles / num_entries),
+            "cars_top": int(total_vehicles / num_entries),
+            "cars_bot": int(total_vehicles / num_entries)
         }
 
         additional_net_params = {
@@ -478,7 +479,7 @@ def variable_lanes_exp_setup(sim_params=None,
             "target_velocity": 8,
             "max_accel": 1,
             "max_decel": 1,
-            "num_steps": 500
+            "sort_vehicles": False
         }
         env_params = EnvParams(additional_params=additional_env_params)
 

@@ -26,7 +26,8 @@ def run_task(*_):
         acceleration_controller=(RLController, {}),
         routing_controller=(ContinuousRouter, {}),
         car_following_params=SumoCarFollowingParams(
-            speed_mode="no_collide",
+            speed_mode="obey_safe_speed",
+            decel=1.5,
         ),
         num_vehicles=1)
     vehicles.add(
@@ -36,14 +37,16 @@ def run_task(*_):
         }),
         routing_controller=(ContinuousRouter, {}),
         car_following_params=SumoCarFollowingParams(
-            speed_mode="no_collide",
+            speed_mode="obey_safe_speed",
+            decel=1.5,
         ),
         num_vehicles=13)
 
     additional_env_params = {
         "target_velocity": 20,
         "max_accel": 3,
-        "max_decel": 3
+        "max_decel": 3,
+        "sort_vehicles": False
     }
     env_params = EnvParams(
         horizon=HORIZON, additional_params=additional_env_params)

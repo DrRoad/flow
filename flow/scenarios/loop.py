@@ -18,7 +18,41 @@ ADDITIONAL_NET_PARAMS = {
 
 
 class LoopScenario(Scenario):
-    """Ring road scenario."""
+    """Ring road scenario.
+
+    This network consists of nodes at the top, bottom, left, and right
+    peripheries of the circles, connected by four 90 degree arcs. It is
+    parametrized by the length of the entire network and the number of lanes
+    and speed limit of the edges.
+
+    Requires from net_params:
+
+    * **length** : length of the circle
+    * **lanes** : number of lanes in the circle
+    * **speed_limit** : max speed limit of the circle
+    * **resolution** : number of nodes resolution
+
+    Usage
+    -----
+    >>> from flow.core.params import NetParams
+    >>> from flow.core.params import VehicleParams
+    >>> from flow.core.params import InitialConfig
+    >>> from flow.scenarios import LoopScenario
+    >>>
+    >>> scenario = LoopScenario(
+    >>>     name='ring_road',
+    >>>     vehicles=VehicleParams(),
+    >>>     net_params=NetParams(
+    >>>         additional_params={
+    >>>             'length': 230,
+    >>>             'lanes': 1,
+    >>>             'speed_limit': 30,
+    >>>             'resolution': 40
+    >>>         },
+    >>>         no_internal_links=True  # we do not want junctions
+    >>>     )
+    >>> )
+    """
 
     def __init__(self,
                  name,
@@ -26,22 +60,10 @@ class LoopScenario(Scenario):
                  net_params,
                  initial_config=InitialConfig(),
                  traffic_lights=TrafficLightParams()):
-        """Initialize a loop scenario.
-
-        Requires from net_params:
-        - length: length of the circle
-        - lanes: number of lanes in the circle
-        - speed_limit: max speed limit of the circle
-        - resolution: number of nodes resolution
-
-        See flow/scenarios/base_scenario.py for description of params.
-        """
+        """Initialize a loop scenario."""
         for p in ADDITIONAL_NET_PARAMS.keys():
             if p not in net_params.additional_params:
                 raise KeyError('Network parameter "{}" not supplied'.format(p))
-
-        self.length = net_params.additional_params["length"]
-        self.lanes = net_params.additional_params["lanes"]
 
         super().__init__(name, vehicles, net_params, initial_config,
                          traffic_lights)
@@ -80,68 +102,68 @@ class LoopScenario(Scenario):
 
         edges = [{
             "id":
-            "bottom",
+                "bottom",
             "type":
-            "edgeType",
+                "edgeType",
             "from":
-            "bottom",
+                "bottom",
             "to":
-            "right",
+                "right",
             "length":
-            edgelen,
+                edgelen,
             "shape":
-            [
-                (r * cos(t), r * sin(t))
-                for t in linspace(-pi / 2, 0, resolution)
-            ]
+                [
+                    (r * cos(t), r * sin(t))
+                    for t in linspace(-pi / 2, 0, resolution)
+                ]
         }, {
             "id":
-            "right",
+                "right",
             "type":
-            "edgeType",
+                "edgeType",
             "from":
-            "right",
+                "right",
             "to":
-            "top",
+                "top",
             "length":
-            edgelen,
+                edgelen,
             "shape":
-            [
-                (r * cos(t), r * sin(t))
-                for t in linspace(0, pi / 2, resolution)
-            ]
+                [
+                    (r * cos(t), r * sin(t))
+                    for t in linspace(0, pi / 2, resolution)
+                ]
         }, {
             "id":
-            "top",
+                "top",
             "type":
-            "edgeType",
+                "edgeType",
             "from":
-            "top",
+                "top",
             "to":
-            "left",
+                "left",
             "length":
-            edgelen,
+                edgelen,
             "shape":
-            [
-                (r * cos(t), r * sin(t))
-                for t in linspace(pi / 2, pi, resolution)
-            ]
+                [
+                    (r * cos(t), r * sin(t))
+                    for t in linspace(pi / 2, pi, resolution)
+                ]
         }, {
             "id":
-            "left",
+                "left",
             "type":
-            "edgeType",
+                "edgeType",
             "from":
-            "left",
+                "left",
             "to":
-            "bottom",
+                "bottom",
             "length":
-            edgelen,
+                edgelen,
             "shape":
-            [
-                (r * cos(t), r * sin(t))
-                for t in linspace(pi, 3 * pi / 2, resolution)
-            ]
+                [
+                    (r * cos(t), r * sin(t))
+                    for t in linspace(pi, 3 * pi / 2, resolution)
+                ]
         }]
 
         return edges
@@ -172,7 +194,7 @@ class LoopScenario(Scenario):
 
     def specify_edge_starts(self):
         """See parent class."""
-        edgelen = self.length / 4
+        edgelen = self.net_params.additional_params["length"] / 4
 
         edgestarts = [("bottom", 0), ("right", edgelen), ("top", 2 * edgelen),
                       ("left", 3 * edgelen)]

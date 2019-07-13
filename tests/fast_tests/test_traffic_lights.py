@@ -163,13 +163,14 @@ class TestPOEnv(unittest.TestCase):
         # free data used by the class
         self.env = None
 
-    def compare_ordering(self, ordering):
+    @staticmethod
+    def compare_ordering(ordering):
         # take in a list like [[bot0_0, right0_0, top0_1, left1_0], [bot....]
         # print(ordering)
         for x in ordering:
             # print(x)
-            if not (x[0].startswith("bot") and x[1].startswith("right")
-                    and x[2].startswith("top") and x[3].startswith("left")):
+            if not (x[0].startswith("bot") and x[1].startswith("right") and
+                    x[2].startswith("top") and x[3].startswith("left")):
                 return False
         return True
 
@@ -177,7 +178,7 @@ class TestPOEnv(unittest.TestCase):
         # reset the environment
         self.env.reset()
 
-        node_mapping = self.env.scenario.get_node_mapping()
+        node_mapping = self.env.scenario.node_mapping
         nodes = [elem[0] for elem in node_mapping]
         ordering = [elem[1] for elem in node_mapping]
 
@@ -186,7 +187,7 @@ class TestPOEnv(unittest.TestCase):
 
     def test_k_closest(self):
         self.env.step(None)
-        node_mapping = self.env.scenario.get_node_mapping()
+        node_mapping = self.env.scenario.node_mapping
 
         # get the node mapping for node center0
         c0_edges = node_mapping[0][1]
@@ -203,7 +204,10 @@ class TestPOEnv(unittest.TestCase):
             self.env.k_closest_to_intersection(c0_edges[3], 3), k_closest[4:6])
 
         for veh_id in k_closest:
-            self.assertTrue(self.env.vehicles.get_edge(veh_id) in c0_edges)
+            self.assertTrue(self.env.k.vehicle.get_edge(veh_id) in c0_edges)
+
+        with self.assertRaises(ValueError):
+            self.env.k_closest_to_intersection(c0_edges, -1)
 
 
 class TestItRuns(unittest.TestCase):
@@ -246,22 +250,22 @@ class TestIndividualLights(unittest.TestCase):
             "duration": "31",
             "minDur": "8",
             "maxDur": "45",
-            "state": "GGGrrrGGGrrr"
+            "state": "GrGr"
         }, {
             "duration": "6",
             "minDur": "3",
             "maxDur": "6",
-            "state": "yyyrrryyyrrr"
+            "state": "yryr"
         }, {
             "duration": "31",
             "minDur": "8",
             "maxDur": "45",
-            "state": "rrrGGGrrrGGG"
+            "state": "rGrG"
         }, {
             "duration": "6",
             "minDur": "3",
             "maxDur": "6",
-            "state": "rrryyyrrryyy"
+            "state": "ryry"
         }]
         tl_logic.add("center0", phases=phases, programID=1)
         tl_logic.add("center1", phases=phases, programID=1, offset=1)

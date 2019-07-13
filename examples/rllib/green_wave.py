@@ -3,7 +3,10 @@
 import json
 
 import ray
-from ray.rllib.agents.agent import get_agent_class
+try:
+    from ray.rllib.agents.agent import get_agent_class
+except ImportError:
+    from ray.rllib.agents.registry import get_agent_class
 from ray.tune import run_experiments
 from ray.tune.registry import register_env
 
@@ -22,7 +25,21 @@ N_ROLLOUTS = 20
 N_CPUS = 2
 
 
-def gen_edges(row_num, col_num):
+def gen_edges(col_num, row_num):
+    """Generate the names of the outer edges in the grid network.
+
+    Parameters
+    ----------
+    col_num : int
+        number of columns in the grid
+    row_num : int
+        number of rows in the grid
+
+    Returns
+    -------
+    list of str
+        names of all the outer edges
+    """
     edges = []
     for i in range(col_num):
         edges += ['left' + str(row_num) + '_' + str(i)]
@@ -37,7 +54,26 @@ def gen_edges(row_num, col_num):
 
 
 def get_flow_params(col_num, row_num, additional_net_params):
-    initial_config = InitialConfig(
+    """Define the network and initial params in the presence of inflows.
+
+    Parameters
+    ----------
+    col_num : int
+        number of columns in the grid
+    row_num : int
+        number of rows in the grid
+    additional_net_params : dict
+        network-specific parameters that are unique to the grid
+
+    Returns
+    -------
+    flow.core.params.InitialConfig
+        parameters specifying the initial configuration of vehicles in the
+        network
+    flow.core.params.NetParams
+        network-specific parameters used to generate the scenario
+    """
+    initial = InitialConfig(
         spacing='custom', lanes_distribution=float('inf'), shuffle=True)
 
     inflow = InFlows()
@@ -50,50 +86,68 @@ def get_flow_params(col_num, row_num, additional_net_params):
             departLane='free',
             departSpeed=20)
 
-    net_params = NetParams(
+    net = NetParams(
         inflows=inflow,
         no_internal_links=False,
         additional_params=additional_net_params)
 
-    return initial_config, net_params
+    return initial, net
 
 
-def get_non_flow_params(enter_speed, additional_net_params):
+def get_non_flow_params(enter_speed, add_net_params):
+    """Define the network and initial params in the absence of inflows.
+
+    Note that when a vehicle leaves a network in this case, it is immediately
+    returns to the start of the row/column it was traversing, and in the same
+    direction as it was before.
+
+    Parameters
+    ----------
+    enter_speed : float
+        initial speed of vehicles as they enter the network.
+    add_net_params: dict
+        additional network-specific parameters (unique to the grid)
+
+    Returns
+    -------
+    flow.core.params.InitialConfig
+        parameters specifying the initial configuration of vehicles in the
+        network
+    flow.core.params.NetParams
+        network-specific parameters used to generate the scenario
+    """
     additional_init_params = {'enter_speed': enter_speed}
-    initial_config = InitialConfig(
+    initial = InitialConfig(
         spacing='custom', additional_params=additional_init_params)
-    net_params = NetParams(
-        no_internal_links=False, additional_params=additional_net_params)
+    net = NetParams(
+        no_internal_links=False, additional_params=add_net_params)
 
-    return initial_config, net_params
+    return initial, net
 
 
-v_enter = 30
-
-inner_length = 800
-long_length = 100
-short_length = 800
-n = 1
-m = 5
-num_cars_left = 3
-num_cars_right = 3
-num_cars_top = 15
-num_cars_bot = 15
-rl_veh = 0
-tot_cars = (num_cars_left + num_cars_right) * m \
-           + (num_cars_bot + num_cars_top) * n
+V_ENTER = 30
+INNER_LENGTH = 300
+LONG_LENGTH = 100
+SHORT_LENGTH = 300
+N_ROWS = 3
+N_COLUMNS = 3
+NUM_CARS_LEFT = 1
+NUM_CARS_RIGHT = 1
+NUM_CARS_TOP = 1
+NUM_CARS_BOT = 1
+tot_cars = (NUM_CARS_LEFT + NUM_CARS_RIGHT) * N_COLUMNS \
+           + (NUM_CARS_BOT + NUM_CARS_TOP) * N_ROWS
 
 grid_array = {
-    'short_length': short_length,
-    'inner_length': inner_length,
-    'long_length': long_length,
-    'row_num': n,
-    'col_num': m,
-    'cars_left': num_cars_left,
-    'cars_right': num_cars_right,
-    'cars_top': num_cars_top,
-    'cars_bot': num_cars_bot,
-    'rl_veh': rl_veh
+    "short_length": SHORT_LENGTH,
+    "inner_length": INNER_LENGTH,
+    "long_length": LONG_LENGTH,
+    "row_num": N_ROWS,
+    "col_num": N_COLUMNS,
+    "cars_left": NUM_CARS_LEFT,
+    "cars_right": NUM_CARS_RIGHT,
+    "cars_top": NUM_CARS_TOP,
+    "cars_bot": NUM_CARS_BOT
 }
 
 additional_env_params = {
@@ -117,14 +171,12 @@ vehicles.add(
     acceleration_controller=(SimCarFollowingController, {}),
     car_following_params=SumoCarFollowingParams(
         minGap=2.5,
-        max_speed=v_enter,
+        decel=7.5,  # avoid collisions at emergency stops
+        max_speed=V_ENTER,
         speed_mode="all_checks",
     ),
     routing_controller=(GridRouter, {}),
     num_vehicles=tot_cars)
-
-initial_config, net_params = \
-    get_non_flow_params(v_enter, additional_net_params)
 
 flow_params = dict(
     # name of the experiment
@@ -135,6 +187,9 @@ flow_params = dict(
 
     # name of the scenario class the experiment is running on
     scenario='SimpleGridScenario',
+
+    # simulator that is used by the experiment
+    simulator='traci',
 
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
@@ -149,20 +204,54 @@ flow_params = dict(
     ),
 
     # network-related parameters (see flow.core.params.NetParams and the
-    # scenario's documentation or ADDITIONAL_NET_PARAMS component)
-    net=net_params,
+    # scenario's documentation or ADDITIONAL_NET_PARAMS component). This is
+    # filled in by the setup_exps method below.
+    net=None,
 
     # vehicles to be placed in the network at the start of a rollout (see
-    # flow.core.vehicles.Vehicles)
+    # flow.core.params.VehicleParams)
     veh=vehicles,
 
     # parameters specifying the positioning of vehicles upon initialization/
-    # reset (see flow.core.params.InitialConfig)
-    initial=initial_config,
+    # reset (see flow.core.params.InitialConfig). This is filled in by the
+    # setup_exps method below.
+    initial=None,
 )
 
 
-def setup_exps():
+def setup_exps(use_inflows=False):
+    """Return the relevant components of an RLlib experiment.
+
+    Parameters
+    ----------
+    use_inflows : bool, optional
+        set to True if you would like to run the experiment with inflows of
+        vehicles from the edges, and False otherwise
+
+    Returns
+    -------
+    str
+        name of the training algorithm
+    str
+        name of the gym environment to be trained
+    dict
+        training configuration parameters
+    """
+    # collect the initialization and network-specific parameters based on the
+    # choice to use inflows or not
+    if use_inflows:
+        initial_config, net_params = get_flow_params(
+            col_num=N_COLUMNS,
+            row_num=N_ROWS,
+            additional_net_params=additional_net_params)
+    else:
+        initial_config, net_params = get_non_flow_params(
+            enter_speed=V_ENTER,
+            add_net_params=additional_net_params)
+
+    # add the new parameters to flow_params
+    flow_params['initial'] = initial_config
+    flow_params['net'] = net_params
 
     alg_run = 'PPO'
 
@@ -176,6 +265,7 @@ def setup_exps():
     config['lambda'] = 0.97
     config['kl_target'] = 0.02
     config['num_sgd_iter'] = 10
+    config['clip_actions'] = False  # FIXME(ev) temporary ray bug
     config['horizon'] = HORIZON
 
     # save the flow params for replay

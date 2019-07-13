@@ -3,11 +3,9 @@
 Bottleneck in which the actions are specifying a desired velocity in a segment
 of space. The autonomous penetration rate in this example is 10%.
 
-Action Dimension: (?, )
-
-Observation Dimension: (?, )
-
-Horizon: 1000 steps
+- **Action Dimension**: (?, )
+- **Observation Dimension**: (?, )
+- **Horizon**: 1000 steps
 """
 
 from flow.core.params import SumoParams, EnvParams, InitialConfig, NetParams, \
@@ -17,7 +15,7 @@ from flow.core.params import VehicleParams
 from flow.controllers import RLController, ContinuousRouter
 
 # time horizon of a single rollout
-HORIZON = 1000
+HORIZON = 1500
 
 SCALING = 1
 NUM_LANES = 4 * SCALING  # number of lanes in the widest highway
@@ -51,6 +49,7 @@ vehicles.add(
 controlled_segments = [("1", 1, False), ("2", 2, True), ("3", 2, True),
                        ("4", 2, True), ("5", 1, False)]
 num_observed_segments = [("1", 1), ("2", 3), ("3", 3), ("4", 3), ("5", 1)]
+
 additional_env_params = {
     "target_velocity": 40,
     "disable_tb": True,
@@ -62,11 +61,11 @@ additional_env_params = {
     "lane_change_duration": 5,
     "max_accel": 3,
     "max_decel": 3,
-    "inflow_range": [1000, 2000]
+    "inflow_range": [1200, 2500]
 }
 
 # flow rate
-flow_rate = 1900 * SCALING
+flow_rate = 2000 * SCALING
 
 # percentage of flow coming out of each lane
 inflow = InFlows()
@@ -89,7 +88,7 @@ if not DISABLE_TB:
 if not DISABLE_RAMP_METER:
     traffic_lights.add(node_id="3")
 
-additional_net_params = {"scaling": SCALING}
+additional_net_params = {"scaling": SCALING, "speed_limit": 23}
 net_params = NetParams(
     inflows=inflow,
     no_internal_links=False,
@@ -104,6 +103,9 @@ flow_params = dict(
 
     # name of the scenario class the experiment is running on
     scenario="BottleneckScenario",
+
+    # simulator that is used by the experiment
+    simulator='traci',
 
     # sumo-related parameters (see flow.core.params.SumoParams)
     sim=SumoParams(
@@ -130,7 +132,7 @@ flow_params = dict(
     ),
 
     # vehicles to be placed in the network at the start of a rollout (see
-    # flow.core.vehicles.Vehicles)
+    # flow.core.params.VehicleParams)
     veh=vehicles,
 
     # parameters specifying the positioning of vehicles upon initialization/
